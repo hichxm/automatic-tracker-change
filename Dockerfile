@@ -4,12 +4,11 @@ FROM node:lts-alpine
 # Set working directory
 WORKDIR /app
 
-# Copy package files and install dependencies
-COPY package*.json ./
-RUN npm install
-
-# Copy application files
+# Copy application files, package files
 COPY . .
+
+# Install dependencies
+RUN npm install
 
 # Set executable permissions for shell script
 RUN chmod +x loop.sh
