@@ -1,5 +1,5 @@
 # Run index.js file in contianer
-FROM node:lts-alpine
+FROM node:lts
 
 # Set working directory
 WORKDIR /app
