@@ -1,6 +1,6 @@
 # automatic-tracker-change
 
-A lightweight CLI and Dockerized tool that logs into a qBittorrent Web UI and rewrites tracker URLs in bulk using a JavaScript regular expression and replacement pattern. It can run once (CLI) or continuously (loop mode) in a container.
+A lightweight CLI and Dockerized tool that logs into a qBittorrent Web UI and rewrites tracker URLs in bulk using a JavaScript regular expression and replacement pattern. It can run once or continuously (built-in loop mode).
 
 **Important: This project was created end‑to‑end using Junie Pro from JetBrains.**
 
@@ -10,7 +10,7 @@ A lightweight CLI and Dockerized tool that logs into a qBittorrent Web UI and re
 - Inspect all trackers or a filtered set of torrents (by hash, category, tag, state)
 - Rewrite tracker announce URLs by applying a regex pattern with a replacement
 - Dry‑run mode for safe previews
-- Docker image with a switchable entrypoint (one‑shot CLI or loop mode)
+- Built‑in loop mode (CLI/Docker) via `--loop` and `--interval`, or env: `QBT_LOOP`, `QBT_LOOP_INTERVAL`
 - GitHub Actions workflow to build and publish multi‑arch Docker images with semantic tags
 
 
@@ -82,9 +82,8 @@ node index.js \
 
 
 ## Project structure
-- `index.js` — Main CLI tool
-- `loop.sh` — Simple wrapper to re-run the CLI on an interval (used by Docker loop mode)
-- `Dockerfile` — Container image definition with switchable entrypoint via `RUN_SCRIPT`
+- `index.js` — Main CLI tool (supports single-run and loop mode)
+- `Dockerfile` — Container image definition; runs `node index.js` and accepts `SCRIPT_ARGS`
 - `package.json` — Node package manifest
 
 

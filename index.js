@@ -56,6 +56,8 @@ function parseArgs() {
         args.dryRun = true;
       } else if (a === '--debug') {
         args.debug = true;
+      } else if (a === '--loop') {
+        args.loop = true;
       } else if (next && !next.startsWith('--')) {
         if (key === 'hash') {
           args.hash = args.hash || [];
@@ -79,6 +81,15 @@ function parseArgs() {
   args.password = args.password || process.env.QBT_PASSWORD;
   args.pattern = args.pattern || process.env.QBT_PATTERN;
   args.replacement = args.replacement || process.env.QBT_REPLACEMENT;
+  // Loop support from env vars
+  if (args.loop == null) {
+    const envLoop = (process.env.QBT_LOOP || process.env.LOOP || '').toString().trim();
+    if (envLoop) args.loop = ['1', 'true', 'yes', 'on'].includes(envLoop.toLowerCase());
+  }
+  if (args.interval == null) {
+    const envInt = (process.env.QBT_LOOP_INTERVAL || process.env.LOOP_INTERVAL || '').toString().trim();
+    if (envInt) args.interval = envInt;
+  }
   // Debug from env: QBT_DEBUG=1 or DEBUG=1
   if (args.debug == null) {
     const envDebug = (process.env.QBT_DEBUG || process.env.DEBUG || '').toString().trim();
@@ -109,15 +120,23 @@ Options:
   --tag <tag>              Limit to torrents with a tag (repeatable)
   --state <state>          Limit to torrents by state (e.g., pausedUP, stalledDL)
   --dry-run                Show actions without applying changes
+  --loop                   Enable continuous loop mode (see interval)
+  --interval <seconds>     Interval between iterations in loop mode (default 10)
   --debug                  Enable verbose debug logging
   --help                   Show this help
 
 Environment variables (fallbacks):
-  QBT_BASE_URL, QBT_USERNAME, QBT_PASSWORD, QBT_PATTERN, QBT_REPLACEMENT, QBT_DEBUG (or DEBUG)
+  QBT_BASE_URL, QBT_USERNAME, QBT_PASSWORD, QBT_PATTERN, QBT_REPLACEMENT
+  QBT_DEBUG (or DEBUG), QBT_LOOP (or LOOP), QBT_LOOP_INTERVAL (or LOOP_INTERVAL)
 
 Examples:
+  # Single run (dry-run)
   node index.js --baseUrl http://localhost:8080 --username admin --password secret \
     --pattern "(^|//)old\\.tracker\\.com(:\\d+)?(/.*)?$" --replacement "$1new.tracker.org$3" --dry-run
+
+  # Loop every 30 seconds
+  node index.js --baseUrl http://localhost:8080 --username admin --password secret \
+    --pattern "(^|//)old\\.tracker\\.com(:\\d+)?(/.*)?$" --replacement "$1new.tracker.org$3" --loop --interval 30
 `);
 }
 
@@ -212,12 +231,10 @@ async function qbtEditTracker(baseUrl, cookieJar, hash, origUrl, newUrl) {
   }
 }
 
-async function main() {
-  const args = parseArgs();
-
+async function runOnce(args) {
   if (args.help) {
     printHelp();
-    return;
+    return 0;
   }
 
   // Enable debug global
@@ -242,7 +259,7 @@ async function main() {
   if (missing.length) {
     console.error(`Missing required options: ${missing.join(', ')}`);
     printHelp();
-    exit(2);
+    return 2;
   }
 
   // Build regex, default to global flag
@@ -251,7 +268,7 @@ async function main() {
     regex = new RegExp(args.pattern, 'g');
   } catch (e) {
     console.error(`Invalid regex pattern: ${e.message}`);
-    exit(2);
+    return 2;
   }
   debug('Using regex:', regex, 'replacement:', args.replacement);
 
@@ -263,7 +280,7 @@ async function main() {
     debug('Login successful. Cookie set:', !!cookieJar.cookie);
   } catch (e) {
     console.error(e.message);
-    exit(1);
+    return 1;
   }
 
   let torrents;
@@ -277,12 +294,12 @@ async function main() {
     }
   } catch (e) {
     console.error(e.message);
-    exit(1);
+    return 1;
   }
 
   if (!torrents.length) {
     console.log('No torrents matched the filters. Nothing to do.');
-    return;
+    return 0;
   }
 
   let totalChecked = 0;
@@ -328,11 +345,30 @@ async function main() {
 
   console.log(`\nDone. Checked ${totalChecked} tracker URLs. ${args.dryRun ? 'Would change' : 'Changed'} ${totalChanged}.`);
   debug('Finished processing.');
+  return 0;
 }
 
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
 if (require.main === module) {
-  main().catch(err => {
-    console.error(err);
-    exit(1);
-  });
+  (async () => {
+    const args = parseArgs();
+    if (args.loop) {
+      // Parse interval (seconds) default 10
+      let intervalSec = Number(args.interval || 10);
+      if (!Number.isFinite(intervalSec) || intervalSec <= 0) intervalSec = 10;
+      console.log(`Loop mode enabled. Interval: ${intervalSec}s`);
+      while (true) {
+        try {
+          await runOnce(args);
+        } catch (err) {
+          console.error('Unexpected error:', err && err.message ? err.message : err);
+        }
+        await sleep(intervalSec * 1000);
+      }
+    } else {
+      const code = await runOnce(args);
+      exit(code);
+    }
+  })();
 }

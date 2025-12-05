@@ -1,4 +1,4 @@
-# Run index.js file in contianer
+# Run index.js file in container
 FROM node:lts-alpine
 
 # Set working directory
@@ -10,12 +10,9 @@ COPY . .
 # Install dependencies
 RUN npm install
 
-# Set executable permissions for shell script
-RUN chmod +x loop.sh
-
-# Environment variable to choose script (default to index.js)
-ENV RUN_SCRIPT=index
+# Optional runtime args for index.js
 ENV SCRIPT_ARGS=""
 
-# Run either index.js or loop.sh based on RUN_SCRIPT env variable
-CMD sh -c 'if [ "$RUN_SCRIPT" = "loop" ]; then ./loop.sh $SCRIPT_ARGS; else node index.js $SCRIPT_ARGS; fi'
+# To enable loop mode, pass "--loop" (and optional "--interval <sec>") via SCRIPT_ARGS
+# Or use env vars: QBT_LOOP=1 and QBT_LOOP_INTERVAL=10
+CMD sh -c 'node index.js $SCRIPT_ARGS'
