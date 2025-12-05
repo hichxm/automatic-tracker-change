@@ -41,16 +41,17 @@ function maskSecret(val) {
   if (!val) return '';
   const s = String(val);
   if (s.length <= 2) return '*'.repeat(s.length);
-  return '*'.repeat(Math.max(2, s.length - 2)) + s.slice(-2);
+  return '*'.repeat(s.length - 2) + s.slice(-2);
 }
 
 function parseArgs() {
   const args = {};
-  for (let i = 2; i < argv.length; i++) {
-    const a = argv[i];
-    if (a.startsWith('--')) {
+  const av = process.argv || [];
+  for (let i = 2; i < av.length; i++) {
+    const a = av[i];
+    if (a && a.startsWith('--')) {
       const key = a.slice(2);
-      const next = argv[i + 1];
+      const next = av[i + 1];
       // flags
       if (a === '--dry-run') {
         args.dryRun = true;
@@ -58,7 +59,7 @@ function parseArgs() {
         args.debug = true;
       } else if (a === '--loop') {
         args.loop = true;
-      } else if (next && !next.startsWith('--')) {
+      } else if (next && !String(next).startsWith('--')) {
         if (key === 'hash') {
           args.hash = args.hash || [];
           args.hash.push(next);
@@ -372,3 +373,16 @@ if (require.main === module) {
     }
   })();
 }
+
+// Export functions for testing
+module.exports = {
+  parseArgs,
+  maskSecret,
+  printHelp,
+  qbtLogin,
+  qbtGetTorrents,
+  qbtGetTrackers,
+  qbtEditTracker,
+  runOnce,
+  sleep,
+};

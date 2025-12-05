@@ -1,9 +1,11 @@
 name: Build and Push Docker image to Docker Hub
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       bump:
@@ -25,10 +27,19 @@ env:
 jobs:
   build-and-push:
     name: Build and push
+    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && (github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'master')) || (github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout (from CI head_sha)
+        if: ${{ github.event_name == 'workflow_run' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Checkout (manual or other)
+        if: ${{ github.event_name != 'workflow_run' }}
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -102,7 +113,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Create and push git tag
-        if: github.ref == 'refs/heads/main'
+        if: ${{ (github.event_name == 'workflow_run' && (github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'master')) || (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) }}
         env:
           NEXT_TAG: ${{ steps.version.outputs.next_tag }}
         run: |
