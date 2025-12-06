@@ -28,83 +28,85 @@
  * - Use --category or --tag to filter torrents.
  */
 
-const { argv, exit } = require('node:process');
-const { URL, URLSearchParams } = require('node:url');
-const { QbtClient } = require('./lib/QbtClient');
+const {argv, exit} = require('node:process');
+const {URL, URLSearchParams} = require('node:url');
+const {QbtClient} = require('./lib/QbtClient');
 
 let DEBUG = false;
+
 function debug(...args) {
-  if (DEBUG) {
-    console.log('[DEBUG]', ...args);
-  }
+    if (DEBUG) {
+        console.log('[DEBUG]', ...args);
+    }
 }
+
 function maskSecret(val) {
-  if (!val) return '';
-  const s = String(val);
-  if (s.length <= 2) return '*'.repeat(s.length);
-  return '*'.repeat(s.length - 2) + s.slice(-2);
+    if (!val) return '';
+    const s = String(val);
+    if (s.length <= 2) return '*'.repeat(s.length);
+    return '*'.repeat(s.length - 2) + s.slice(-2);
 }
 
 function parseArgs() {
-  const args = {};
-  const av = process.argv || [];
-  for (let i = 2; i < av.length; i++) {
-    const a = av[i];
-    if (a && a.startsWith('--')) {
-      const key = a.slice(2);
-      const next = av[i + 1];
-      // flags
-      if (a === '--dry-run') {
-        args.dryRun = true;
-      } else if (a === '--debug') {
-        args.debug = true;
-      } else if (a === '--loop') {
-        args.loop = true;
-      } else if (next && !String(next).startsWith('--')) {
-        if (key === 'hash') {
-          args.hash = args.hash || [];
-          args.hash.push(next);
-        } else if (key === 'tag') {
-          args.tag = args.tag || [];
-          args.tag.push(next);
-        } else {
-          args[key] = next;
+    const args = {};
+    const av = process.argv || [];
+    for (let i = 2; i < av.length; i++) {
+        const a = av[i];
+        if (a && a.startsWith('--')) {
+            const key = a.slice(2);
+            const next = av[i + 1];
+            // flags
+            if (a === '--dry-run') {
+                args.dryRun = true;
+            } else if (a === '--debug') {
+                args.debug = true;
+            } else if (a === '--loop') {
+                args.loop = true;
+            } else if (next && !String(next).startsWith('--')) {
+                if (key === 'hash') {
+                    args.hash = args.hash || [];
+                    args.hash.push(next);
+                } else if (key === 'tag') {
+                    args.tag = args.tag || [];
+                    args.tag.push(next);
+                } else {
+                    args[key] = next;
+                }
+                i++;
+            } else {
+                args[key] = true;
+            }
         }
-        i++;
-      } else {
-        args[key] = true;
-      }
     }
-  }
 
-  // Support env vars as fallback
-  args.baseUrl = args.baseUrl || process.env.QBT_BASE_URL;
-  args.username = args.username || process.env.QBT_USERNAME;
-  args.password = args.password || process.env.QBT_PASSWORD;
-  args.pattern = args.pattern || process.env.QBT_PATTERN;
-  args.replacement = args.replacement || process.env.QBT_REPLACEMENT;
-  // Loop support from env vars
-  if (args.loop == null) {
-    const envLoop = (process.env.QBT_LOOP || process.env.LOOP || '').toString().trim();
-    if (envLoop) args.loop = ['1', 'true', 'yes', 'on'].includes(envLoop.toLowerCase());
-  }
-  if (args.interval == null) {
-    const envInt = (process.env.QBT_LOOP_INTERVAL || process.env.LOOP_INTERVAL || '').toString().trim();
-    if (envInt) args.interval = envInt;
-  }
-  // Debug from env: QBT_DEBUG=1 or DEBUG=1
-  if (args.debug == null) {
-    const envDebug = (process.env.QBT_DEBUG || process.env.DEBUG || '').toString().trim();
-    if (envDebug) {
-      args.debug = ['1', 'true', 'yes', 'on'].includes(envDebug.toLowerCase());
+    // Support env vars as fallback
+    args.baseUrl = args.baseUrl || process.env.QBT_BASE_URL;
+    args.username = args.username || process.env.QBT_USERNAME;
+    args.password = args.password || process.env.QBT_PASSWORD;
+    args.pattern = args.pattern || process.env.QBT_PATTERN;
+    args.replacement = args.replacement || process.env.QBT_REPLACEMENT;
+    // Loop support from env vars
+    if (args.loop == null) {
+        const envLoop = (process.env.QBT_LOOP || process.env.LOOP || '').toString().trim();
+        if (envLoop) args.loop = ['1', 'true', 'yes', 'on'].includes(envLoop.toLowerCase());
     }
-  }
+    if (args.interval == null) {
+        const envInt = (process.env.QBT_LOOP_INTERVAL || process.env.LOOP_INTERVAL || '').toString().trim();
+        if (envInt) args.interval = envInt;
+    }
+    // Debug from env: QBT_DEBUG=1 or DEBUG=1
+    if (args.debug == null) {
+        const envDebug = (process.env.QBT_DEBUG || process.env.DEBUG || '').toString().trim();
+        if (envDebug) {
+            args.debug = ['1', 'true', 'yes', 'on'].includes(envDebug.toLowerCase());
+        }
+    }
 
-  return args;
+    return args;
 }
 
 function printHelp() {
-  console.log(`
+    console.log(`
 qBittorrent Tracker URL Rewriter
 
 Usage:
@@ -142,188 +144,190 @@ Examples:
 `);
 }
 
-async function qbtLogin(baseUrl, username, password, cookieJar = { cookie: '' }) {
-  const client = new QbtClient(baseUrl, username, password, { debug: DEBUG });
-  if (cookieJar.cookie) client.setCookie(cookieJar.cookie);
-  await client.login();
-  cookieJar.cookie = client.getCookie();
+async function qbtLogin(baseUrl, username, password, cookieJar = {cookie: ''}) {
+    const client = new QbtClient(baseUrl, username, password, {debug: DEBUG});
+    if (cookieJar.cookie) client.setCookie(cookieJar.cookie);
+    await client.login();
+    cookieJar.cookie = client.getCookie();
 }
 
 async function qbtGetTorrents(baseUrl, cookieJar, filters) {
-  const client = new QbtClient(baseUrl, undefined, undefined, { debug: DEBUG });
-  if (cookieJar && cookieJar.cookie) client.setCookie(cookieJar.cookie);
-  const data = await client.getTorrents(filters);
-  if (cookieJar) cookieJar.cookie = client.getCookie();
-  return data;
+    const client = new QbtClient(baseUrl, undefined, undefined, {debug: DEBUG});
+    if (cookieJar && cookieJar.cookie) client.setCookie(cookieJar.cookie);
+    const data = await client.getTorrents(filters);
+    if (cookieJar) cookieJar.cookie = client.getCookie();
+    return data;
 }
 
 async function qbtGetTrackers(baseUrl, cookieJar, hash) {
-  const client = new QbtClient(baseUrl, undefined, undefined, { debug: DEBUG });
-  if (cookieJar && cookieJar.cookie) client.setCookie(cookieJar.cookie);
-  const data = await client.getTrackers(hash);
-  if (cookieJar) cookieJar.cookie = client.getCookie();
-  return data;
+    const client = new QbtClient(baseUrl, undefined, undefined, {debug: DEBUG});
+    if (cookieJar && cookieJar.cookie) client.setCookie(cookieJar.cookie);
+    const data = await client.getTrackers(hash);
+    if (cookieJar) cookieJar.cookie = client.getCookie();
+    return data;
 }
 
 async function qbtEditTracker(baseUrl, cookieJar, hash, origUrl, newUrl) {
-  const client = new QbtClient(baseUrl, undefined, undefined, { debug: DEBUG });
-  if (cookieJar && cookieJar.cookie) client.setCookie(cookieJar.cookie);
-  await client.editTracker(hash, origUrl, newUrl);
-  if (cookieJar) cookieJar.cookie = client.getCookie();
+    const client = new QbtClient(baseUrl, undefined, undefined, {debug: DEBUG});
+    if (cookieJar && cookieJar.cookie) client.setCookie(cookieJar.cookie);
+    await client.editTracker(hash, origUrl, newUrl);
+    if (cookieJar) cookieJar.cookie = client.getCookie();
 }
 
 async function runOnce(args) {
-  if (args.help) {
-    printHelp();
-    return 0;
-  }
-
-  // Enable debug global
-  DEBUG = !!args.debug;
-  if (DEBUG) {
-    const masked = {
-      baseUrl: args.baseUrl,
-      username: args.username,
-      password: maskSecret(args.password),
-      pattern: args.pattern,
-      replacement: args.replacement,
-      category: args.category,
-      tag: args.tag,
-      state: args.state,
-      hash: args.hash,
-      dryRun: !!args.dryRun,
-    };
-    debug('Arguments:', masked);
-  }
-
-  const missing = ['baseUrl', 'username', 'password', 'pattern', 'replacement'].filter(k => !args[k]);
-  if (missing.length) {
-    console.error(`Missing required options: ${missing.join(', ')}`);
-    printHelp();
-    return 2;
-  }
-
-  // Build regex, default to global flag
-  let regex;
-  try {
-    regex = new RegExp(args.pattern, 'g');
-  } catch (e) {
-    console.error(`Invalid regex pattern: ${e.message}`);
-    return 2;
-  }
-  debug('Using regex:', regex, 'replacement:', args.replacement);
-
-  const client = new QbtClient(args.baseUrl, args.username, args.password, { debug: DEBUG });
-
-  try {
-    debug('Attempting login as:', args.username);
-    await client.login();
-    debug('Login successful.');
-  } catch (e) {
-    console.error(e.message);
-    return 1;
-  }
-
-  let torrents;
-  try {
-    torrents = await client.getTorrents(args);
-    if (args.hash && args.hash.length > 1) {
-      // When multiple hashes are specified, filter manually
-      const set = new Set(args.hash.map(h => h.toLowerCase()));
-      torrents = torrents.filter(t => set.has((t.hash || '').toLowerCase()));
-      debug('Applied manual hash filter, resulting count:', torrents.length);
+    if (args.help) {
+        printHelp();
+        return 0;
     }
-  } catch (e) {
-    console.error(e.message);
-    return 1;
-  }
 
-  if (!torrents.length) {
-    console.log('No torrents matched the filters. Nothing to do.');
-    return 0;
-  }
+    // Enable debug global
+    DEBUG = !!args.debug;
+    if (DEBUG) {
+        const masked = {
+            baseUrl: args.baseUrl,
+            username: args.username,
+            password: maskSecret(args.password),
+            pattern: args.pattern,
+            replacement: args.replacement,
+            category: args.category,
+            tag: args.tag,
+            state: args.state,
+            hash: args.hash,
+            dryRun: !!args.dryRun,
+        };
+        debug('Arguments:', masked);
+    }
 
-  let totalChecked = 0;
-  let totalChanged = 0;
-  for (const t of torrents) {
-    let trackers;
+    const missing = ['baseUrl', 'username', 'password', 'pattern', 'replacement'].filter(k => !args[k]);
+    if (missing.length) {
+        console.error(`Missing required options: ${missing.join(', ')}`);
+        printHelp();
+        return 2;
+    }
+
+    // Build regex, default to global flag
+    let regex;
     try {
-      trackers = await client.getTrackers(t.hash);
+        regex = new RegExp(args.pattern, 'g');
     } catch (e) {
-      console.error(e.message);
-      continue;
+        console.error(`Invalid regex pattern: ${e.message}`);
+        return 2;
+    }
+    debug('Using regex:', regex, 'replacement:', args.replacement);
+
+    const client = new QbtClient(args.baseUrl, args.username, args.password, {debug: DEBUG});
+
+    try {
+        debug('Attempting login as:', args.username);
+        await client.login();
+        debug('Login successful.');
+    } catch (e) {
+        console.error(e.message);
+        return 1;
     }
 
-    for (const tr of trackers) {
-      const { url: origUrl } = tr;
-      // Skip DHT/PeX or empty URLs if any
-      if (!origUrl || !/^https?:\/\//i.test(origUrl)) {
-        debug('Skipping non-HTTP(S) tracker or empty URL for torrent:', t.hash);
-        continue;
-      }
-      // Compute replacement
-      const newUrl = origUrl.replace(regex, args.replacement);
-      totalChecked++;
-      if (newUrl !== origUrl) {
-        if (args.dryRun) {
-          console.log(`[DRY-RUN] ${t.name} (${t.hash}):`);
-          console.log(`  ${origUrl} -> ${newUrl}`);
-        } else {
-          try {
-            await client.editTracker(t.hash, origUrl, newUrl);
-            console.log(`Updated: ${t.name} (${t.hash})`);
-            console.log(`  ${origUrl} -> ${newUrl}`);
-            totalChanged++;
-          } catch (e) {
-            console.error(`Error updating tracker for ${t.name}: ${e.message}`);
-          }
+    let torrents;
+    try {
+        torrents = await client.getTorrents(args);
+        if (args.hash && args.hash.length > 1) {
+            // When multiple hashes are specified, filter manually
+            const set = new Set(args.hash.map(h => h.toLowerCase()));
+            torrents = torrents.filter(t => set.has((t.hash || '').toLowerCase()));
+            debug('Applied manual hash filter, resulting count:', torrents.length);
         }
-      } else {
-        debug('No change for URL:', origUrl);
-      }
+    } catch (e) {
+        console.error(e.message);
+        return 1;
     }
-  }
 
-  console.log(`\nDone. Checked ${totalChecked} tracker URLs. ${args.dryRun ? 'Would change' : 'Changed'} ${totalChanged}.`);
-  debug('Finished processing.');
-  return 0;
+    if (!torrents.length) {
+        console.log('No torrents matched the filters. Nothing to do.');
+        return 0;
+    }
+
+    let totalChecked = 0;
+    let totalChanged = 0;
+    for (const t of torrents) {
+        let trackers;
+        try {
+            trackers = await client.getTrackers(t.hash);
+        } catch (e) {
+            console.error(e.message);
+            continue;
+        }
+
+        for (const tr of trackers) {
+            const {url: origUrl} = tr;
+            // Skip DHT/PeX or empty URLs if any
+            if (!origUrl || !/^https?:\/\//i.test(origUrl)) {
+                debug('Skipping non-HTTP(S) tracker or empty URL for torrent:', t.hash);
+                continue;
+            }
+            // Compute replacement
+            const newUrl = origUrl.replace(regex, args.replacement);
+            totalChecked++;
+            if (newUrl !== origUrl) {
+                if (args.dryRun) {
+                    console.log(`[DRY-RUN] ${t.name} (${t.hash}):`);
+                    console.log(`  ${origUrl} -> ${newUrl}`);
+                } else {
+                    try {
+                        await client.editTracker(t.hash, origUrl, newUrl);
+                        console.log(`Updated: ${t.name} (${t.hash})`);
+                        console.log(`  ${origUrl} -> ${newUrl}`);
+                        totalChanged++;
+                    } catch (e) {
+                        console.error(`Error updating tracker for ${t.name}: ${e.message}`);
+                    }
+                }
+            } else {
+                debug('No change for URL:', origUrl);
+            }
+        }
+    }
+
+    console.log(`\nDone. Checked ${totalChecked} tracker URLs. ${args.dryRun ? 'Would change' : 'Changed'} ${totalChanged}.`);
+    debug('Finished processing.');
+    return 0;
 }
 
-function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+function sleep(ms) {
+    return new Promise(res => setTimeout(res, ms));
+}
 
 if (require.main === module) {
-  (async () => {
-    const args = parseArgs();
-    if (args.loop) {
-      // Parse interval (seconds) default 10
-      let intervalSec = Number(args.interval || 10);
-      if (!Number.isFinite(intervalSec) || intervalSec <= 0) intervalSec = 10;
-      console.log(`Loop mode enabled. Interval: ${intervalSec}s`);
-      while (true) {
-        try {
-          await runOnce(args);
-        } catch (err) {
-          console.error('Unexpected error:', err && err.message ? err.message : err);
+    (async () => {
+        const args = parseArgs();
+        if (args.loop) {
+            // Parse interval (seconds) default 10
+            let intervalSec = Number(args.interval || 10);
+            if (!Number.isFinite(intervalSec) || intervalSec <= 0) intervalSec = 10;
+            console.log(`Loop mode enabled. Interval: ${intervalSec}s`);
+            while (true) {
+                try {
+                    await runOnce(args);
+                } catch (err) {
+                    console.error('Unexpected error:', err && err.message ? err.message : err);
+                }
+                await sleep(intervalSec * 1000);
+            }
+        } else {
+            const code = await runOnce(args);
+            exit(code);
         }
-        await sleep(intervalSec * 1000);
-      }
-    } else {
-      const code = await runOnce(args);
-      exit(code);
-    }
-  })();
+    })();
 }
 
 // Export functions for testing and library consumers
 module.exports = {
-  parseArgs,
-  maskSecret,
-  printHelp,
-  qbtLogin,
-  qbtGetTorrents,
-  qbtGetTrackers,
-  qbtEditTracker,
-  runOnce,
-  sleep,
-  QbtClient,
+    parseArgs,
+    maskSecret,
+    printHelp,
+    qbtLogin,
+    qbtGetTorrents,
+    qbtGetTrackers,
+    qbtEditTracker,
+    runOnce,
+    sleep,
+    QbtClient,
 };
