@@ -30,6 +30,7 @@
 
 const { argv, exit } = require('node:process');
 const { URL, URLSearchParams } = require('node:url');
+const { QbtClient } = require('./lib/QbtClient');
 
 let DEBUG = false;
 function debug(...args) {
@@ -141,95 +142,34 @@ Examples:
 `);
 }
 
-async function qbtLogin(baseUrl, username, password, cookieJar) {
-  const loginUrl = new URL('/api/v2/auth/login', baseUrl);
-  debug('Login URL:', loginUrl.toString());
-  const res = await fetch(loginUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Cookie': cookieJar.cookie || '',
-    },
-    body: new URLSearchParams({ username, password }).toString(),
-    redirect: 'manual',
-  });
-  debug('Login response:', res.status, res.statusText);
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Login failed: HTTP ${res.status} ${res.statusText} - ${text}`);
-  }
-  // Capture SID cookie
-  const setCookie = res.headers.get('set-cookie') || '';
-  debug('Set-Cookie header present:', !!setCookie);
-  const m = /SID=([^;]+);/.exec(setCookie);
-  if (!m) {
-    // Some versions set "qbittorrent_sess" or reuse cookie on 200.
-    const m2 = /(SID|qbittorrent_sess)=([^;]+);/.exec(setCookie);
-    if (!m2) {
-      // qBittorrent may return 200 with existing cookie. Proceed if already set.
-      if (!cookieJar.cookie) {
-        throw new Error('Login did not return a session cookie. Check credentials or CSRF settings.');
-      }
-      debug('Proceeding with preexisting cookie.');
-    } else {
-      cookieJar.cookie = `${m2[1]}=${m2[2]}`;
-      debug('Captured session cookie type:', m2[1]);
-    }
-  } else {
-    cookieJar.cookie = `SID=${m[1]}`;
-    debug('Captured session cookie: SID');
-  }
+async function qbtLogin(baseUrl, username, password, cookieJar = { cookie: '' }) {
+  const client = new QbtClient(baseUrl, username, password, { debug: DEBUG });
+  if (cookieJar.cookie) client.setCookie(cookieJar.cookie);
+  await client.login();
+  cookieJar.cookie = client.getCookie();
 }
 
 async function qbtGetTorrents(baseUrl, cookieJar, filters) {
-  const url = new URL('/api/v2/torrents/info', baseUrl);
-  if (filters.category) url.searchParams.set('category', filters.category);
-  if (filters.tag && filters.tag.length) url.searchParams.set('tag', filters.tag.join(','));
-  if (filters.hash && filters.hash.length === 1) url.searchParams.set('hashes', filters.hash[0]);
-  if (filters.state) url.searchParams.set('filter', filters.state);
-
-  debug('Fetching torrents from:', url.toString());
-  const res = await fetch(url, {
-    headers: { Cookie: cookieJar.cookie || '' },
-  });
-  debug('Torrents response:', res.status, res.statusText);
-  if (!res.ok) throw new Error(`Failed to fetch torrents: ${res.status} ${res.statusText}`);
-  const data = await res.json();
-  debug('Torrents count:', Array.isArray(data) ? data.length : 'n/a');
+  const client = new QbtClient(baseUrl, undefined, undefined, { debug: DEBUG });
+  if (cookieJar && cookieJar.cookie) client.setCookie(cookieJar.cookie);
+  const data = await client.getTorrents(filters);
+  if (cookieJar) cookieJar.cookie = client.getCookie();
   return data;
 }
 
 async function qbtGetTrackers(baseUrl, cookieJar, hash) {
-  const url = new URL('/api/v2/torrents/trackers', baseUrl);
-  url.searchParams.set('hash', hash);
-  debug('Fetching trackers for hash:', hash, 'URL:', url.toString());
-  const res = await fetch(url, { headers: { Cookie: cookieJar.cookie || '' } });
-  debug('Trackers response:', res.status, res.statusText);
-  if (!res.ok) throw new Error(`Failed to fetch trackers for ${hash}: ${res.status} ${res.statusText}`);
-  const data = await res.json();
-  debug('Trackers count for', hash, ':', Array.isArray(data) ? data.length : 'n/a');
+  const client = new QbtClient(baseUrl, undefined, undefined, { debug: DEBUG });
+  if (cookieJar && cookieJar.cookie) client.setCookie(cookieJar.cookie);
+  const data = await client.getTrackers(hash);
+  if (cookieJar) cookieJar.cookie = client.getCookie();
   return data;
 }
 
 async function qbtEditTracker(baseUrl, cookieJar, hash, origUrl, newUrl) {
-  const url = new URL('/api/v2/torrents/editTracker', baseUrl);
-  const body = new URLSearchParams({ hash, origUrl, newUrl }).toString();
-  debug('Editing tracker for hash:', hash);
-  debug('Orig URL:', origUrl);
-  debug('New URL:', newUrl);
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Cookie: cookieJar.cookie || '',
-    },
-    body,
-  });
-  debug('Edit tracker response:', res.status, res.statusText);
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to edit tracker (hash=${hash}): ${res.status} ${res.statusText} - ${text}`);
-  }
+  const client = new QbtClient(baseUrl, undefined, undefined, { debug: DEBUG });
+  if (cookieJar && cookieJar.cookie) client.setCookie(cookieJar.cookie);
+  await client.editTracker(hash, origUrl, newUrl);
+  if (cookieJar) cookieJar.cookie = client.getCookie();
 }
 
 async function runOnce(args) {
@@ -273,12 +213,12 @@ async function runOnce(args) {
   }
   debug('Using regex:', regex, 'replacement:', args.replacement);
 
-  const cookieJar = { cookie: '' };
+  const client = new QbtClient(args.baseUrl, args.username, args.password, { debug: DEBUG });
 
   try {
     debug('Attempting login as:', args.username);
-    await qbtLogin(args.baseUrl, args.username, args.password, cookieJar);
-    debug('Login successful. Cookie set:', !!cookieJar.cookie);
+    await client.login();
+    debug('Login successful.');
   } catch (e) {
     console.error(e.message);
     return 1;
@@ -286,7 +226,7 @@ async function runOnce(args) {
 
   let torrents;
   try {
-    torrents = await qbtGetTorrents(args.baseUrl, cookieJar, args);
+    torrents = await client.getTorrents(args);
     if (args.hash && args.hash.length > 1) {
       // When multiple hashes are specified, filter manually
       const set = new Set(args.hash.map(h => h.toLowerCase()));
@@ -308,7 +248,7 @@ async function runOnce(args) {
   for (const t of torrents) {
     let trackers;
     try {
-      trackers = await qbtGetTrackers(args.baseUrl, cookieJar, t.hash);
+      trackers = await client.getTrackers(t.hash);
     } catch (e) {
       console.error(e.message);
       continue;
@@ -330,7 +270,7 @@ async function runOnce(args) {
           console.log(`  ${origUrl} -> ${newUrl}`);
         } else {
           try {
-            await qbtEditTracker(args.baseUrl, cookieJar, t.hash, origUrl, newUrl);
+            await client.editTracker(t.hash, origUrl, newUrl);
             console.log(`Updated: ${t.name} (${t.hash})`);
             console.log(`  ${origUrl} -> ${newUrl}`);
             totalChanged++;
@@ -374,7 +314,7 @@ if (require.main === module) {
   })();
 }
 
-// Export functions for testing
+// Export functions for testing and library consumers
 module.exports = {
   parseArgs,
   maskSecret,
@@ -385,4 +325,5 @@ module.exports = {
   qbtEditTracker,
   runOnce,
   sleep,
+  QbtClient,
 };

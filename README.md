@@ -83,6 +83,7 @@ node index.js \
 
 ## Project structure
 - `index.js` — Main CLI tool (supports single-run and loop mode)
+- `lib/QbtClient.js` — qBittorrent Web API client class used by the CLI
 - `Dockerfile` — Container image definition; runs `node index.js` and accepts `SCRIPT_ARGS`
 - `package.json` — Node package manifest
 
