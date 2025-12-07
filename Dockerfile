@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy application files, package files
 COPY . .
 
-# Install dependencies
-RUN npm install
+# Install production dependencies only
+RUN npm install --production
 
 # Optional runtime args for index.js
 ENV SCRIPT_ARGS=""
