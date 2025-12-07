@@ -13,6 +13,73 @@ A lightweight CLI and Dockerized tool that logs into a qBittorrent Web UI and re
 - Built‑in loop mode (CLI/Docker) via `--loop` and `--interval`, or env: `QBT_LOOP`, `QBT_LOOP_INTERVAL`
 - GitHub Actions workflow to build and publish multi‑arch Docker images with semantic tags
 
+## Docker image
+- Docker Hub: https://hub.docker.com/r/hichxm/automatic-tracker-change
+- Pull: `docker pull hichxm/automatic-tracker-change:latest`
+
+## Docker usage examples
+
+### Run once (preview with --dry-run)
+```
+docker run --rm \
+  -e SCRIPT_ARGS='--baseUrl http://host.docker.internal:8080 \
+                  --username admin \
+                  --password secret \
+                  --pattern "(^|//)(old-tracker\\.example\\.org)(/.*)?$" \
+                  --replacement "$1new-tracker.example.org$3" \
+                  --dry-run' \
+  hichxm/automatic-tracker-change:latest
+```
+
+Alternatively, you can use environment variables (they map to the same CLI flags):
+```
+docker run --rm \
+  -e QBT_BASE_URL=http://host.docker.internal:8080 \
+  -e QBT_USERNAME=admin \
+  -e QBT_PASSWORD=secret \
+  -e QBT_PATTERN='(^|//)(old-tracker\.example\.org)(/.*)?$' \
+  -e QBT_REPLACEMENT='$1new-tracker.example.org$3' \
+  -e SCRIPT_ARGS='--dry-run' \
+  hichxm/automatic-tracker-change:latest
+```
+
+### Run continuously (loop mode)
+```
+docker run -d --name automatic-tracker-change \
+  --restart unless-stopped \
+  -e QBT_BASE_URL=http://host.docker.internal:8080 \
+  -e QBT_USERNAME=admin \
+  -e QBT_PASSWORD=secret \
+  -e QBT_PATTERN='(udp://)tracker-old\.example\.com(:[0-9]+)?/announce' \
+  -e QBT_REPLACEMENT='$1tracker-new.example.com$2/announce' \
+  -e QBT_LOOP=1 \
+  -e QBT_LOOP_INTERVAL=15 \
+  hichxm/automatic-tracker-change:latest
+```
+
+### Using docker-compose
+```
+services:
+  automatic-tracker-change:
+    image: hichxm/automatic-tracker-change:latest
+    container_name: automatic-tracker-change
+    restart: unless-stopped
+    environment:
+      QBT_BASE_URL: http://host.docker.internal:8080
+      QBT_USERNAME: admin
+      QBT_PASSWORD: secret
+      QBT_PATTERN: '(^|//)(old-tracker\.example\.org)(/.*)?$'
+      QBT_REPLACEMENT: '$1new-tracker.example.org$3'
+      QBT_LOOP: '1'
+      QBT_LOOP_INTERVAL: '30'
+      # Optional: extra flags (e.g., --debug) can be passed via SCRIPT_ARGS
+      SCRIPT_ARGS: '--debug'
+```
+
+Notes:
+- On macOS/Windows, `host.docker.internal` points to the host machine. On Linux, you may need `--network host` or `--add-host=host.docker.internal:host-gateway` (Docker 20.10+).
+- Start with `--dry-run` to safely preview changes.
+- Store credentials securely (Docker secrets, env files, or orchestrator-specific secret stores).
 
 ## Requirements
 - qBittorrent with Web UI enabled (Preferences → Web UI)
